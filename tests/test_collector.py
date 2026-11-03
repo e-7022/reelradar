@@ -219,6 +219,8 @@ def test_region_and_script_filters():
     assert has_region_marker("No Weekend Show Today #BiggBossTamil #TamilComedy")
     assert has_region_marker("comment your opinion #maheshbabu #telugu")
     assert not has_region_marker("Road trip through Indiana #aiart #indianapolis")
+    assert not has_region_marker("Designed by me, desire to create #designer #egypt #fyppppp")
+    assert has_region_marker("#desicomedy #hindireels")
     tamil = ["Boomer Aunty is back! #BiggBossTamil", "VJ is the real showrunner #TamilComedy",
              "This week's twist is wild", "The admin is on leave #funny"]
     assert "региональные" in us_reject_reason(creator_profile(tamil), 0.6)

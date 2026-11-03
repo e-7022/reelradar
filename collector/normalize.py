@@ -53,12 +53,13 @@ FOREIGN_STOPWORDS = {
 # Ищутся в подписи и хэштегах как начало слова (#tamilcomedy → tamil).
 REGION_MARKERS = (
     "india", "indian", "desi", "hindi", "bharat", "tamil", "telugu", "kannada", "malayalam",
-    "marathi", "punjab", "gujarat", "bengal", "bangla", "kerala", "bollywood", "tollywood",
+    "marathi", "punjab", "gujarat", "bengali", "bangla", "kerala", "bollywood", "tollywood",
     "kollywood", "biggboss", "diwali", "pakistan", "urdu", "nepal", "uzbek", "suniyintellekt",
-    "indonesia", "fyppppp", "brasil", "brazil", "memesbr", "humorbr", "pinoy", "filipino",
-    "nigeria", "naija", "arab", "turk", "egypt", "maheshbabu", "motupatlu",
+    "indonesia", "brasil", "brazil", "memesbr", "humorbr", "pinoy", "filipino",
+    "nigeria", "naija", "turk", "maheshbabu", "motupatlu",
 )
-REGION_EXCEPTIONS = ("indiana", "indianapolis", "turkey")
+# Английские слова, которые начинаются так же, как метки (desi → design, desire…)
+REGION_EXCEPTIONS = ("indiana", "indianapolis", "turkey", "design", "desir", "desist", "desic")
 TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
 
 
