@@ -145,6 +145,8 @@ def _check_language(creators: list[dict]) -> int:
         values = {}
         if profile["english_score"] is not None:
             values["english_score"] = profile["english_score"]
+        if c.get("status") == "candidate" and (profile["region_share"] > 0 or profile["non_latin_share"] > 0):
+            values["english_score"] = 0.0   # как в discover: такого кандидата не повысят
         reason = us_reject_reason(profile, config.MIN_ENGLISH_SCORE)
         if reason and c.get("status") == "tracked" and c.get("source") != "seed":
             values["status"] = "rejected"
