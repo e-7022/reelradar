@@ -110,7 +110,9 @@ from reels r
 left join baseline b using (username)
 left join vel v using (short_code)
 left join creators c using (username)
-where coalesce(c.status, 'candidate') not in ('blocked', 'rejected');
+-- Только проверенные отслеживаемые авторы: у кандидатов из поиска по хэштегам
+-- в базе лишь их лучшие ролики, поэтому outlier был бы завышен.
+where c.status = 'tracked';
 
 -- Сводка по авторам
 create or replace view creator_scores as
@@ -127,7 +129,7 @@ select
   count(*) filter (where s.tier in ('viral', 'hot'))    as hot_count
 from creators c
 left join reel_scores s using (username)
-where c.status not in ('blocked', 'rejected')
+where c.status = 'tracked'
 group by c.username, c.status, c.english_score, c.last_tracked_at;
 
 -- Тренды хэштегов: сколько раз тег встречается в «залетевших» роликах
