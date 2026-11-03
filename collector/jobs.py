@@ -39,16 +39,36 @@ def _apply_seeds() -> None:
     print(f"[seeds] авторов из seeds.txt: {len(seeds)}")
 
 
+def _run_batched(actor: str, key: str, values: list[str], per_value: int, extra: dict) -> list[dict]:
+    """Запускает Actor пачками, чтобы каждый запуск укладывался в MAX_ITEMS_PER_RUN.
+
+    На бесплатном плане Apify многие скраперы отдают не больше 100 результатов за запуск.
+    """
+    per_value = max(1, min(per_value, config.MAX_ITEMS_PER_RUN))
+    size = max(1, config.MAX_ITEMS_PER_RUN // per_value)
+    items, failed = [], 0
+    batches = [values[i:i + size] for i in range(0, len(values), size)]
+    for n, batch in enumerate(batches, 1):
+        print(f"[batch {n}/{len(batches)}] {key}: {len(batch)}")
+        try:
+            items += apify.run_actor(actor, {key: batch, "resultsLimit": per_value, **extra},
+                                     max_items=len(batch) * per_value)
+        except SystemExit:
+            raise                      # кончился кредит — дальше нет смысла
+        except Exception as exc:       # одна сломанная пачка не должна валить остальные
+            failed += 1
+            print(f"[batch {n}] ошибка: {exc}")
+    if batches and failed == len(batches):
+        raise RuntimeError("все запуски Apify завершились ошибкой")
+    return items
+
+
 def discover() -> None:
     config.require("APIFY_TOKEN", "SUPABASE_URL", "SUPABASE_SERVICE_KEY")
     _apply_seeds()
 
-    items = apify.run_actor(
-        config.HASHTAG_ACTOR,
-        {"hashtags": config.HASHTAGS, "resultsType": "reels", "order": "top",
-         "resultsLimit": config.HASHTAG_RESULTS},
-        max_items=len(config.HASHTAGS) * config.HASHTAG_RESULTS,
-    )
+    items = _run_batched(config.HASHTAG_ACTOR, "hashtags", config.HASHTAGS,
+                         config.HASHTAG_RESULTS, {"resultsType": "reels", "order": "top"})
     reels = [r for r in (normalize_reel(i, "hashtag") for i in items) if r]
     db.save_reels(reels)
     print(f"[discover] сохранено роликов: {len(reels)}")
@@ -98,11 +118,8 @@ def track() -> None:
         return
     usernames = [c["username"] for c in creators]
 
-    items = apify.run_actor(
-        config.REEL_ACTOR,
-        {"username": usernames, "resultsLimit": config.REELS_PER_CREATOR, "skipPinnedPosts": True},
-        max_items=len(usernames) * config.REELS_PER_CREATOR,
-    )
+    items = _run_batched(config.REEL_ACTOR, "username", usernames,
+                         config.REELS_PER_CREATOR, {"skipPinnedPosts": True})
     reels = [r for r in (normalize_reel(i, "track") for i in items) if r]
     db.save_reels(reels)
     db.update("creators", {"username": _in(usernames)}, {"last_tracked_at": db.now_iso()})

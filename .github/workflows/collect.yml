@@ -11,6 +11,10 @@ on:
         type: choice
         options: [track, discover]
         default: track
+      reels_per_creator:
+        description: "Роликов на автора (пусто = по умолчанию 5; 30 — разовая догрузка истории)"
+        required: false
+        default: ""
 
 concurrency:
   group: collect
@@ -27,11 +31,12 @@ jobs:
       HASHTAGS: ${{ vars.HASHTAGS }}
       HASHTAG_RESULTS: ${{ vars.HASHTAG_RESULTS }}
       MAX_CREATORS: ${{ vars.MAX_CREATORS }}
-      REELS_PER_CREATOR: ${{ vars.REELS_PER_CREATOR }}
+      REELS_PER_CREATOR: ${{ inputs.reels_per_creator || vars.REELS_PER_CREATOR }}
       MIN_ENGLISH_SCORE: ${{ vars.MIN_ENGLISH_SCORE }}
       MAX_CHARGE_PER_RUN_USD: ${{ vars.MAX_CHARGE_PER_RUN_USD }}
       REEL_ACTOR: ${{ vars.REEL_ACTOR }}
       HASHTAG_ACTOR: ${{ vars.HASHTAG_ACTOR }}
+      MAX_ITEMS_PER_RUN: ${{ vars.MAX_ITEMS_PER_RUN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

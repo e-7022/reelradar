@@ -123,6 +123,7 @@ def test_discover_promotes_english_candidates(monkeypatch):
         _reel("4", "ban", 5000000, "This is the best one you will see today"),
     ]
     monkeypatch.setattr(config, "MAX_CREATORS", 2)
+    monkeypatch.setattr(config, "HASHTAGS", ["aiart", "aivideo"])  # одна пачка
     calls = _patch(monkeypatch, fake, items)
     jobs.discover()
     assert calls[0][1]["resultsType"] == "reels"
@@ -163,3 +164,13 @@ def test_empty_env_vars_fall_back_to_defaults(monkeypatch):
     finally:
         monkeypatch.undo()
         importlib.reload(config)
+
+
+def test_runs_are_split_into_batches(monkeypatch):
+    fake = FakeDB([{"username": f"u{i}", "status": "tracked", "source": None} for i in range(25)])
+    calls = _patch(monkeypatch, fake, [])
+    monkeypatch.setattr(config, "MAX_ITEMS_PER_RUN", 100)
+    monkeypatch.setattr(config, "REELS_PER_CREATOR", 10)
+    jobs.track()
+    assert [len(c[1]["username"]) for c in calls] == [10, 10, 5]
+    assert all(c[2] <= 100 and c[1]["resultsLimit"] == 10 for c in calls)

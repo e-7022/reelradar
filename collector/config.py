@@ -38,10 +38,11 @@ HASHTAG_RESULTS = _int("HASHTAG_RESULTS", 40)          # топ-роликов �
 
 # --- Отслеживание авторов ---
 MAX_CREATORS = _int("MAX_CREATORS", 40)                # сколько авторов держим в работе
-REELS_PER_CREATOR = _int("REELS_PER_CREATOR", 10)      # последних роликов за один прогон
+REELS_PER_CREATOR = _int("REELS_PER_CREATOR", 5)       # последних роликов за ежедневный прогон
 MIN_ENGLISH_SCORE = _float("MIN_ENGLISH_SCORE", 0.6)   # порог «англоязычный автор»
 
 # --- Предохранители бюджета (бесплатно = $5 кредита Apify в месяц) ---
+MAX_ITEMS_PER_RUN = _int("MAX_ITEMS_PER_RUN", 100)     # лимит скрапера на бесплатном плане
 MAX_CHARGE_PER_RUN_USD = _float("MAX_CHARGE_PER_RUN_USD", 0.25)
 RUN_TIMEOUT_SEC = _int("RUN_TIMEOUT_SEC", 900)
 
