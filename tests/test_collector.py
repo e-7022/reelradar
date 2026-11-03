@@ -47,6 +47,20 @@ def test_normalize_skips_photos_and_errors():
     assert normalize_reel({"error": "not_found", "url": "x"}, "track") is None
 
 
+def test_english_score_rejects_latin_script_non_english():
+    for caption in [
+        "Kis kis ko future tension hai😂 #viral #aiartwork",
+        "Sheru Bhai ki chaabi ne nadi mein macha diya bawal!",
+        "Ayollarga yuborib qo'yamiz. #fun #aiart",
+        "Dan jika suatu saat aku kembali ke masa lalu, aku akan memeluk diriku sendiri.",
+        "Que dancinha 😂 - Video feito com inteligência artificial, não",
+        "thor, odin force için son bir kere şansını deniyor… ile üretildi.",
+    ]:
+        assert english_score(caption) < 0.3, caption
+    assert english_score("Why lift a finger when the teapot can pour itself?") > 0.8
+    assert english_score("Sunday Service #film") is None      # без служебных слов — неясно
+
+
 def test_english_score():
     assert english_score("This took 6 hours and 400 generations, what do you think?") > 0.8
     assert english_score("Это заняло шесть часов и много генераций") < 0.3
@@ -61,9 +75,14 @@ class FakeDB:
         self.saved = []
 
     def select(self, table, params):
+        if table == "reels":
+            names = {n.strip('"') for n in params["username"][4:-1].split(",")}
+            return [r for r in self.saved if r["username"] in names]
         rows = list(self.creators.values())
         if "status" in params:
-            rows = [r for r in rows if r.get("status") == params["status"].split(".", 1)[1]]
+            op, val = params["status"].split(".", 1)
+            allowed = set(val.strip("()").split(",")) if op == "in" else {val}
+            rows = [r for r in rows if r.get("status") in allowed]
         if "english_score" in params:
             th = float(params["english_score"].split(".", 1)[1])
             rows = [r for r in rows if (r.get("english_score") or 0) >= th]
@@ -140,7 +159,7 @@ def test_track_updates_and_demotes(monkeypatch):
         {"username": "b", "status": "tracked", "source": "seed"},
         {"username": "c", "status": "tracked", "source": None},
     ])
-    ru = "Новая анимация, как вам такое?"
+    ru = "Kis kis ko future tension hai, bhai kya mast hai"   # хинглиш латиницей
     items = [_reel("1", "a", 100, "This is so cool, made with love for you")] + \
             [_reel(f"c{i}", "c", 100, ru) for i in range(3)] + \
             [_reel(f"b{i}", "b", 100, ru) for i in range(3)]
@@ -148,7 +167,7 @@ def test_track_updates_and_demotes(monkeypatch):
     jobs.track()
     assert calls[0][1]["username"] == ["a", "b", "c"]
     assert fake.creators["a"]["last_tracked_at"]
-    assert fake.creators["c"]["status"] == "candidate"   # неанглоязычный — исключён
+    assert fake.creators["c"]["status"] == "rejected"    # неанглоязычный — отклонён
     assert fake.creators["b"]["status"] == "tracked"     # добавлен вручную — остаётся
 
 
@@ -174,3 +193,22 @@ def test_runs_are_split_into_batches(monkeypatch):
     jobs.track()
     assert [len(c[1]["username"]) for c in calls] == [10, 10, 5]
     assert all(c[2] <= 100 and c[1]["resultsLimit"] == 10 for c in calls)
+
+
+def test_rescore_rejects_and_refills(monkeypatch):
+    fake = FakeDB([
+        {"username": "hi", "status": "tracked", "source": None},
+        {"username": "en", "status": "tracked", "source": None},
+        {"username": "cand", "status": "candidate", "source": None, "best_views": 10},
+    ])
+    fake.saved = (
+        [{"username": "hi", "caption": "Kis kis ko future tension hai bhai"}] * 3
+        + [{"username": "en", "caption": "Made this for you, what do you think?"}] * 3
+        + [{"username": "cand", "caption": "This is how I animate a dream"}]
+    )
+    _patch(monkeypatch, fake, [])
+    monkeypatch.setattr(config, "MAX_CREATORS", 2)
+    jobs.rescore()
+    assert fake.creators["hi"]["status"] == "rejected"
+    assert fake.creators["en"]["status"] == "tracked"
+    assert fake.creators["cand"]["status"] == "tracked"   # занял освободившееся место

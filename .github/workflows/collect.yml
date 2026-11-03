@@ -9,7 +9,7 @@ on:
       job:
         description: "Что запустить"
         type: choice
-        options: [track, discover]
+        options: [track, discover, rescore]
         default: track
       reels_per_creator:
         description: "Роликов на автора (пусто = по умолчанию 5; 15 — разовая догрузка истории)"

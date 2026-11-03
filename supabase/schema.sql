@@ -6,7 +6,7 @@
 create table if not exists creators (
   username        text primary key,
   status          text not null default 'candidate'
-                  check (status in ('tracked', 'candidate', 'blocked')),
+                  check (status in ('tracked', 'candidate', 'blocked', 'rejected')),
   source          text,                 -- 'seed' | 'hashtag'
   english_score   real,                 -- 0..1, эвристика «англоязычный автор»
   best_views      bigint,               -- лучший ролик, найденный при discovery
@@ -110,7 +110,7 @@ from reels r
 left join baseline b using (username)
 left join vel v using (short_code)
 left join creators c using (username)
-where coalesce(c.status, 'candidate') <> 'blocked';
+where coalesce(c.status, 'candidate') not in ('blocked', 'rejected');
 
 -- Сводка по авторам
 create or replace view creator_scores as
@@ -127,7 +127,7 @@ select
   count(*) filter (where s.tier in ('viral', 'hot'))    as hot_count
 from creators c
 left join reel_scores s using (username)
-where c.status <> 'blocked'
+where c.status not in ('blocked', 'rejected')
 group by c.username, c.status, c.english_score, c.last_tracked_at;
 
 -- Тренды хэштегов: сколько раз тег встречается в «залетевших» роликах
@@ -145,6 +145,11 @@ where tier in ('viral', 'hot')
   and posted_at >= now() - interval '14 days'
 group by lower(tag)
 having count(*) >= 2;
+
+-- Для баз, созданных до появления статуса 'rejected'
+alter table creators drop constraint if exists creators_status_check;
+alter table creators add constraint creators_status_check
+  check (status in ('tracked', 'candidate', 'blocked', 'rejected'));
 
 -- ============ Доступ ============
 -- Публичный anon-ключ (дашборд) может только читать. Писать может лишь коллектор

@@ -86,9 +86,14 @@ GitHub → Settings → Secrets and variables → Actions → **Variables** (в�
 
 **Свои авторы** — `seeds.txt`, по одному username на строку. Они отслеживаются всегда.
 
-**Заблокировать автора** — в Supabase SQL Editor:
+**Проверка языка.** Англоязычность автора оценивается по служебным словам в подписях: английские против хинглиша, узбекского, индонезийского, португальского, испанского, французского, турецкого и немецкого, написанных латиницей. Хэштеги не учитываются. Отслеживаемый автор, у которого балл ниже `MIN_ENGLISH_SCORE` (оценено ≥ 3 подписей), получает статус `rejected` и исчезает с дашборда; discover его больше не вернёт. Авторы из `seeds.txt` не отклоняются.
+
+Перепроверить всех авторов по уже собранным подписям (бесплатно, без Apify): Actions → Collect Reels → Run workflow → `rescore`.
+
+**Заблокировать или вернуть автора** — в Supabase SQL Editor:
 ```sql
-update creators set status = 'blocked' where username = 'someone';
+update creators set status = 'blocked' where username = 'someone';    -- убрать навсегда
+update creators set status = 'tracked' where username = 'someone';    -- вернуть
 ```
 
 ## Локальный запуск и тесты

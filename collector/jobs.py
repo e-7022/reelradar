@@ -6,7 +6,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from . import apify, config, db
-from .normalize import creator_english_score, normalize_reel
+from .normalize import creator_english_score, creator_language, normalize_reel
 
 SEEDS_FILE = Path(__file__).resolve().parent.parent / "seeds.txt"
 
@@ -83,11 +83,15 @@ def discover() -> None:
         for u in captions
     ], on_conflict="username")
 
-    # Повышаем лучших англоязычных кандидатов до отслеживаемых, пока есть места
+    _promote()
+
+
+def _promote() -> None:
+    """Повышает лучших англоязычных кандидатов до отслеживаемых, пока есть места."""
     tracked = db.select("creators", {"select": "username", "status": "eq.tracked"})
     slots = config.MAX_CREATORS - len(tracked)
     if slots <= 0:
-        print(f"[discover] свободных мест нет ({len(tracked)}/{config.MAX_CREATORS})")
+        print(f"[promote] свободных мест нет ({len(tracked)}/{config.MAX_CREATORS})")
         return
     promote = db.select("creators", {
         "select": "username,english_score,best_views",
@@ -99,8 +103,47 @@ def discover() -> None:
     if promote:
         db.update("creators", {"username": _in([p["username"] for p in promote])},
                   {"status": "tracked"})
-    print(f"[discover] новых отслеживаемых авторов: {len(promote)} "
+    print(f"[promote] новых отслеживаемых авторов: {len(promote)} "
           f"(всего {len(tracked) + len(promote)}/{config.MAX_CREATORS})")
+
+
+def _captions_from_db(usernames: list[str]) -> dict[str, list[str]]:
+    """Последние подписи авторов из базы (до 30 на автора)."""
+    out = defaultdict(list)
+    for i in range(0, len(usernames), 50):
+        rows = db.select("reels", {
+            "select": "username,caption",
+            "username": _in(usernames[i:i + 50]),
+            "order": "posted_at.desc.nullslast",
+            "limit": 5000,
+        })
+        for r in rows:
+            if len(out[r["username"]]) < 30:
+                out[r["username"]].append(r.get("caption") or "")
+    return out
+
+
+def _check_language(creators: list[dict]) -> int:
+    """Пересчитывает english_score по подписям из базы.
+
+    Отслеживаемых авторов, которые не прошли проверку (≥ 3 оценённых подписей и балл
+    ниже MIN_ENGLISH_SCORE), переводит в 'rejected' — discover их больше не вернёт.
+    Авторы из seeds.txt не отклоняются никогда.
+    """
+    captions = _captions_from_db([c["username"] for c in creators])
+    rejected = 0
+    for c in creators:
+        score, n = creator_language(captions.get(c["username"], []))
+        if score is None:
+            continue
+        values = {"english_score": score}
+        if (c.get("status") == "tracked" and c.get("source") != "seed"
+                and n >= 3 and score < config.MIN_ENGLISH_SCORE):
+            values["status"] = "rejected"
+            rejected += 1
+            print(f"[language] отклонён @{c['username']}: {score} по {n} подписям")
+        db.update("creators", {"username": f"eq.{c['username']}"}, values)
+    return rejected
 
 
 def track() -> None:
@@ -124,22 +167,22 @@ def track() -> None:
     db.save_reels(reels)
     db.update("creators", {"username": _in(usernames)}, {"last_tracked_at": db.now_iso()})
 
-    # Уточняем англоязычность по свежим подписям; явно неанглоязычных
-    # (кроме добавленных вручную) возвращаем в кандидаты — освобождаем место.
-    captions = defaultdict(list)
-    for r in reels:
-        captions[r["username"]].append(r["caption"])
-    demoted = 0
-    seeds = {c["username"] for c in creators if c.get("source") == "seed"}
-    for username, caps in captions.items():
-        score = creator_english_score(caps)
-        if score is None:
-            continue
-        values = {"english_score": score}
-        if score < config.MIN_ENGLISH_SCORE - 0.2 and len(caps) >= 3 and username not in seeds:
-            values["status"] = "candidate"
-            demoted += 1
-        db.update("creators", {"username": f"eq.{username}"}, values)
-
+    rejected = _check_language(
+        [{"username": c["username"], "source": c.get("source"), "status": "tracked"} for c in creators]
+    )
     print(f"[track] авторов: {len(usernames)}, роликов: {len(reels)}, "
-          f"исключено как неанглоязычные: {demoted}")
+          f"отклонено как неанглоязычные: {rejected}")
+
+
+def rescore() -> None:
+    """Перепроверка языка у всех авторов по уже собранным подписям (без Apify)."""
+    config.require("SUPABASE_URL", "SUPABASE_SERVICE_KEY")
+    _apply_seeds()
+    creators = db.select("creators", {
+        "select": "username,source,status",
+        "status": "in.(tracked,candidate)",
+        "limit": 10000,
+    })
+    rejected = _check_language(creators)
+    print(f"[rescore] проверено авторов: {len(creators)}, отклонено: {rejected}")
+    _promote()
