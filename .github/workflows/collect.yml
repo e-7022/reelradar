@@ -1,0 +1,55 @@
+name: Collect Reels
+
+on:
+  schedule:
+    - cron: "23 13 * * *"     # track: каждый день в 13:23 UTC (утро в США)
+    - cron: "41 12 * * 1"     # discover: по понедельникам в 12:41 UTC
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Что запустить"
+        type: choice
+        options: [track, discover]
+        default: track
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      HASHTAGS: ${{ vars.HASHTAGS }}
+      HASHTAG_RESULTS: ${{ vars.HASHTAG_RESULTS }}
+      MAX_CREATORS: ${{ vars.MAX_CREATORS }}
+      REELS_PER_CREATOR: ${{ vars.REELS_PER_CREATOR }}
+      MIN_ENGLISH_SCORE: ${{ vars.MIN_ENGLISH_SCORE }}
+      MAX_CHARGE_PER_RUN_USD: ${{ vars.MAX_CHARGE_PER_RUN_USD }}
+      REEL_ACTOR: ${{ vars.REEL_ACTOR }}
+      HASHTAG_ACTOR: ${{ vars.HASHTAG_ACTOR }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Выбрать задачу
+        id: pick
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "job=${{ inputs.job }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "41 12 * * 1" ]; then
+            echo "job=discover" >> "$GITHUB_OUTPUT"
+          else
+            echo "job=track" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Запуск ${{ steps.pick.outputs.job }}
+        run: python -m collector ${{ steps.pick.outputs.job }}
