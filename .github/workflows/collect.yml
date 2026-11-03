@@ -12,7 +12,7 @@ on:
         options: [track, discover]
         default: track
       reels_per_creator:
-        description: "Роликов на автора (пусто = по умолчанию 5; 30 — разовая догрузка истории)"
+        description: "Роликов на автора (пусто = по умолчанию 5; 15 — разовая догрузка истории)"
         required: false
         default: ""
 
