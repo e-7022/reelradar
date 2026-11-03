@@ -212,3 +212,19 @@ def test_rescore_rejects_and_refills(monkeypatch):
     assert fake.creators["hi"]["status"] == "rejected"
     assert fake.creators["en"]["status"] == "tracked"
     assert fake.creators["cand"]["status"] == "tracked"   # занял освободившееся место
+
+
+def test_region_and_script_filters():
+    from collector.normalize import creator_profile, has_region_marker, us_reject_reason
+    assert has_region_marker("No Weekend Show Today #BiggBossTamil #TamilComedy")
+    assert has_region_marker("comment your opinion #maheshbabu #telugu")
+    assert not has_region_marker("Road trip through Indiana #aiart #indianapolis")
+    tamil = ["Boomer Aunty is back! #BiggBossTamil", "VJ is the real showrunner #TamilComedy",
+             "This week's twist is wild", "The admin is on leave #funny"]
+    assert "региональные" in us_reject_reason(creator_profile(tamil), 0.6)
+    mixed = ["World's most powerful surveillance system: aunties", "First time in a fancy cafe and I sat",
+             "गाँव के बाबू, आसमान वाला रौब! आज बरसेगी सिल्वर इलायची", "This is what happens when you try"]
+    assert "латиницей" in us_reject_reason(creator_profile(mixed), 0.6)
+    us = ["Why lift a finger when the teapot can pour itself?", "She slept for 100 years and still",
+          "A little fairytale magic for your feed #AIAnimation", "Sunday Service #film"]
+    assert us_reject_reason(creator_profile(us), 0.6) is None

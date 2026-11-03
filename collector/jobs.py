@@ -6,7 +6,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from . import apify, config, db
-from .normalize import creator_english_score, creator_language, normalize_reel
+from .normalize import creator_profile, normalize_reel, us_reject_reason
 
 SEEDS_FILE = Path(__file__).resolve().parent.parent / "seeds.txt"
 
@@ -78,8 +78,15 @@ def discover() -> None:
     for r in reels:
         captions[r["username"]].append(r["caption"])
         best[r["username"]] = max(best[r["username"]], r["views"])
+    def discovery_score(caps):
+        # Региональные метки или подписи не латиницей → балл 0, такого кандидата не повысят
+        profile = creator_profile(caps)
+        if profile["region_share"] > 0 or profile["non_latin_share"] > 0:
+            return 0.0
+        return profile["english_score"]
+
     db.upsert("creators", [
-        {"username": u, "english_score": creator_english_score(captions[u]), "best_views": best[u]}
+        {"username": u, "english_score": discovery_score(captions[u]), "best_views": best[u]}
         for u in captions
     ], on_conflict="username")
 
@@ -124,25 +131,27 @@ def _captions_from_db(usernames: list[str]) -> dict[str, list[str]]:
 
 
 def _check_language(creators: list[dict]) -> int:
-    """Пересчитывает english_score по подписям из базы.
+    """Пересчитывает english_score по подписям из базы (до 30 на автора).
 
-    Отслеживаемых авторов, которые не прошли проверку (≥ 3 оценённых подписей и балл
-    ниже MIN_ENGLISH_SCORE), переводит в 'rejected' — discover их больше не вернёт.
-    Авторы из seeds.txt не отклоняются никогда.
+    Отслеживаемых авторов, похожих на неамериканскую аудиторию (не английский язык,
+    подписи не латиницей, региональные хэштеги вроде #tamil, #bollywood, #brasil),
+    переводит в 'rejected' — discover их больше не вернёт. Авторы из seeds.txt
+    не отклоняются никогда.
     """
     captions = _captions_from_db([c["username"] for c in creators])
     rejected = 0
     for c in creators:
-        score, n = creator_language(captions.get(c["username"], []))
-        if score is None:
-            continue
-        values = {"english_score": score}
-        if (c.get("status") == "tracked" and c.get("source") != "seed"
-                and n >= 3 and score < config.MIN_ENGLISH_SCORE):
+        profile = creator_profile(captions.get(c["username"], []))
+        values = {}
+        if profile["english_score"] is not None:
+            values["english_score"] = profile["english_score"]
+        reason = us_reject_reason(profile, config.MIN_ENGLISH_SCORE)
+        if reason and c.get("status") == "tracked" and c.get("source") != "seed":
             values["status"] = "rejected"
             rejected += 1
-            print(f"[language] отклонён @{c['username']}: {score} по {n} подписям")
-        db.update("creators", {"username": f"eq.{c['username']}"}, values)
+            print(f"[language] отклонён @{c['username']}: {reason}")
+        if values:
+            db.update("creators", {"username": f"eq.{c['username']}"}, values)
     return rejected
 
 

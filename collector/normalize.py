@@ -49,6 +49,36 @@ FOREIGN_STOPWORDS = {
     "und", "der", "das", "ist", "nicht", "ich", "mit", "auf", "ein", "eine",
 }
 
+# Признаки аудитории не из США: регионы, языки, киноиндустрии, локальные шоу.
+# Ищутся в подписи и хэштегах как начало слова (#tamilcomedy → tamil).
+REGION_MARKERS = (
+    "india", "indian", "desi", "hindi", "bharat", "tamil", "telugu", "kannada", "malayalam",
+    "marathi", "punjab", "gujarat", "bengal", "bangla", "kerala", "bollywood", "tollywood",
+    "kollywood", "biggboss", "diwali", "pakistan", "urdu", "nepal", "uzbek", "suniyintellekt",
+    "indonesia", "fyppppp", "brasil", "brazil", "memesbr", "humorbr", "pinoy", "filipino",
+    "nigeria", "naija", "arab", "turk", "egypt", "maheshbabu", "motupatlu",
+)
+REGION_EXCEPTIONS = ("indiana", "indianapolis", "turkey")
+TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
+
+
+def has_region_marker(text: str) -> bool:
+    for token in TOKEN_RE.findall((text or "").lower()):
+        if token.startswith(REGION_EXCEPTIONS):
+            continue
+        if token.startswith(REGION_MARKERS):
+            return True
+    return False
+
+
+def _non_latin(text: str) -> bool:
+    """Подпись написана в основном не латиницей (деванагари, кириллица, CJK…)."""
+    clean = URL_RE.sub(" ", MENTION_RE.sub(" ", text or ""))
+    letters = [c for c in clean if c.isalpha()]
+    if len(letters) < 8:
+        return False
+    return sum("a" <= c.lower() <= "z" for c in letters) / len(letters) < 0.5
+
 
 def _first_int(item: dict, *keys: str):
     for key in keys:
@@ -156,6 +186,33 @@ def creator_language(captions: list[str]):
     if not scores:
         return None, 0
     return round(sum(scores) / len(scores), 3), len(scores)
+
+
+def creator_profile(captions: list[str]) -> dict:
+    """Сводка по подписям автора для фильтра «англоязычная аудитория США»."""
+    captions = [c for c in captions if c]
+    score, scored = creator_language(captions)
+    total = len(captions)
+    return {
+        "english_score": score,
+        "scored": scored,
+        "total": total,
+        "region_share": sum(map(has_region_marker, captions)) / total if total else 0.0,
+        "non_latin_share": sum(map(_non_latin, captions)) / total if total else 0.0,
+    }
+
+
+def us_reject_reason(profile: dict, min_english: float, max_share: float = 0.2):
+    """Причина отклонить автора или None. Решение только при ≥ 3 подписях."""
+    if profile["total"] < 3:
+        return None
+    if profile["scored"] >= 3 and profile["english_score"] < min_english:
+        return f"не английский язык ({profile['english_score']})"
+    if profile["non_latin_share"] >= max_share:
+        return f"подписи не латиницей: {profile['non_latin_share']:.0%}"
+    if profile["region_share"] >= max_share:
+        return f"региональные метки: {profile['region_share']:.0%}"
+    return None
 
 
 def creator_english_score(captions: list[str]):
