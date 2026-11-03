@@ -25,8 +25,9 @@ SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 # --- Какие Apify-скраперы использовать ---
 # По умолчанию — дешёвые community-скраперы (~$0.30 за 1000 результатов) с тем же
 # форматом полей, что у официальных apify/instagram-reel-scraper и apify/instagram-hashtag-scraper.
-REEL_ACTOR = os.getenv("REEL_ACTOR", "rowfinch/instagram-reel-scraper")
-HASHTAG_ACTOR = os.getenv("HASHTAG_ACTOR", "rowfinch/instagram-hashtag-scraper")
+# Пустая переменная (GitHub подставляет "" для незаданных vars) = значение по умолчанию.
+REEL_ACTOR = os.getenv("REEL_ACTOR", "").strip() or "rowfinch/instagram-reel-scraper"
+HASHTAG_ACTOR = os.getenv("HASHTAG_ACTOR", "").strip() or "rowfinch/instagram-hashtag-scraper"
 
 # --- Ниша: AI-арт и AI-анимация ---
 HASHTAGS = _list(

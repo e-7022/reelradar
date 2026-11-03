@@ -149,3 +149,17 @@ def test_track_updates_and_demotes(monkeypatch):
     assert fake.creators["a"]["last_tracked_at"]
     assert fake.creators["c"]["status"] == "candidate"   # неанглоязычный — исключён
     assert fake.creators["b"]["status"] == "tracked"     # добавлен вручную — остаётся
+
+
+def test_empty_env_vars_fall_back_to_defaults(monkeypatch):
+    import importlib
+    for name in ("REEL_ACTOR", "HASHTAG_ACTOR", "HASHTAGS", "MAX_CREATORS", "MIN_ENGLISH_SCORE"):
+        monkeypatch.setenv(name, "")
+    cfg = importlib.reload(config)
+    try:
+        assert cfg.REEL_ACTOR == "rowfinch/instagram-reel-scraper"
+        assert cfg.HASHTAG_ACTOR == "rowfinch/instagram-hashtag-scraper"
+        assert "aiart" in cfg.HASHTAGS and cfg.MAX_CREATORS == 40 and cfg.MIN_ENGLISH_SCORE == 0.6
+    finally:
+        monkeypatch.undo()
+        importlib.reload(config)
